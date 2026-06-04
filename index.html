@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- build: v32-user-base-index14-requested-fixes -->
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8" />
@@ -287,20 +288,31 @@ function brushProgressPanel(isMixed=false){
   const seen=Math.min(total, (store.brushSeen||[]).length);
   const pct=total?Math.round(seen/total*100):0;
   const answered=(state.brushBatch||[]).filter(id=>state.brushAnswers[id]!==undefined).length;
-  const remaining=Math.max(0,total-seen);
-  return `<div class="panel"><h2 class="brushBatchTitle">刷題庫模式</h2><p class="hint">每次隨機出現 10 題，從完整題庫抽選；已抽過的題目不會再次出現，直到重置刷題進度。</p><div class="brushProgress"><div class="brushProgressFill" style="width:${pct}%"></div></div><div class="brushMeta"><span>已抽題 ${seen} / ${total}</span><span>${pct}%</span></div><div class="row wrap" style="margin-top:12px"><span class="badge">本組已作答 ${answered} / ${(state.brushBatch||[]).length}</span><button class="btn ghost mini" id="nextBrushBatch" ${remaining<=0?'disabled':''}>下一組 10 題</button><button class="btn ghost mini" id="resetBrushProgress">重置刷題進度</button></div></div>`;
+  return `<div class="panel"><h2 class="brushBatchTitle">刷題庫模式</h2><p class="hint">每次隨機出現 10 題，從完整題庫抽選；已抽過的題目不會再次出現，直到重置刷題進度。</p><div class="brushProgress"><div class="brushProgressFill" style="width:${pct}%"></div></div><div class="brushMeta" style="display:block;line-height:1.7"><div>已抽題 ${seen} / ${total}</div><div>完成 ${pct}%</div></div><div class="row wrap" style="margin-top:12px"><span class="badge">本組已作答 ${answered} / ${(state.brushBatch||[]).length}</span><button class="btn ghost mini" id="resetBrushProgress">重置刷題進度</button></div></div>`;
 }
 function renderSingle(){
   const el=document.getElementById('single');
   ensureBrushBatch();
   const batch=(state.brushBatch||[]).map(id=>byId.get(id)).filter(Boolean);
+  const remainingCount = Math.max(0, brushPool().length - (store.brushSeen||[]).length);
   if(!batch.length){
     el.innerHTML=brushProgressPanel()+`<div class="empty">你已經刷完全部 ${QUESTIONS.length} 題。可以按「重置進度」重新開始。</div>`;
     document.getElementById('resetBrushProgress')?.addEventListener('click', resetBrushProgress);
     return;
   }
-  el.innerHTML = brushProgressPanel() + batch.map((q,idx)=>questionCard(q,{context:'single', selected:state.brushAnswers[q.id] ?? null}).replace('<div class="qid">', `<div class="qid">本組第 ${idx+1} 題｜`)).join('');
-  document.getElementById('nextBrushBatch')?.addEventListener('click',()=>{newBrushBatch(true); renderStats(); renderSingle(); requestAnimationFrame(()=>window.scrollTo({top:0,behavior:'smooth'}));});
+  const cards = batch.map((q,idx)=>questionCard(q,{context:'single', selected:state.brushAnswers[q.id] ?? null}).replace('<div class="qid">', `<div class="qid">本組第 ${idx+1} 題｜`)).join('');
+  const nextButton = `<div class="panel drillFooter"><button class="btn full" id="nextBrushBatch" ${remainingCount<=0?'disabled':''}>下一組 10 題</button></div>`;
+  el.innerHTML = brushProgressPanel() + cards + nextButton;
+  document.getElementById('nextBrushBatch')?.addEventListener('click',()=>{
+    newBrushBatch(true);
+    renderStats();
+    renderSingle();
+    requestAnimationFrame(()=>{
+      const first=document.querySelector('#single .qcard');
+      if(first) first.scrollIntoView({behavior:'smooth', block:'start'});
+      else window.scrollTo({top:0, behavior:'smooth'});
+    });
+  });
   document.getElementById('resetBrushProgress')?.addEventListener('click', resetBrushProgress);
   bindQuestionActions(el, state.brushAnswers, renderSingle);
 }
@@ -393,7 +405,7 @@ function exitExam(){
 function renderExam(){
   const el=document.getElementById('exam');
   if(!state.exam){
-    el.innerHTML=`<div class="panel"><h2 style="margin:0 0 8px">模擬考試模式</h2><p class="hint">50 題隨機抽取，每次固定納入 5 題情境／危險感知影片題，占整份測驗 10%。選項會隨機排列，作答後約 1 秒自動跳下一題，可回前面修改答案。時間 50 分鐘，最後 2 分鐘轉紅色提醒。及格標準 85 分。</p><button class="btn full" id="startExam">開始 50 題模擬考</button></div>`;
+    el.innerHTML=`<div class="panel"><h2 style="margin:0 0 8px">模擬考試模式</h2><p class="hint">50 題隨機抽取，每次固定納入 5 題情境／危險感知影片題，占整份測驗 10%。選項會隨機排列，選完答案後會停留在原題，請手動按「下一題」；也可以回到前面修改答案。時間 50 分鐘，最後 2 分鐘轉紅色提醒。及格標準 85 分。</p><button class="btn full" id="startExam">開始 50 題模擬考</button></div>`;
     hideBottomBar();
     return;
   }
@@ -423,9 +435,6 @@ function renderExam(){
     el.querySelectorAll('.opt').forEach(b=>b.classList.remove('selected'));
     btn.classList.add('selected');
     renderStats();
-    const answeredIndex=ex.index;
-    clearTimeout(state.examAdvanceTimer);
-    state.examAdvanceTimer=setTimeout(()=>{if(state.mode==='exam' && state.exam===ex && !ex.finished && ex.index===answeredIndex && answeredIndex<ex.items.length-1){ex.index=answeredIndex+1; renderExam();}},1000);
   }));
   showExamActionBar();
 }
